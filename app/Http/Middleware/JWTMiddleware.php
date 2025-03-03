@@ -8,7 +8,7 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Exception;
 
-class JwtMiddleware
+class JWTMiddleware
 {
     public function handle(Request $request, Closure $next)
     {
