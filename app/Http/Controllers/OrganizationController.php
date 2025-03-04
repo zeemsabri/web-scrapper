@@ -9,9 +9,12 @@ use App\Models\Organization;
 use App\Models\Person;
 use App\Models\Deal;
 use Illuminate\Support\Facades\DB;
+use App\Models\AddParticipant;
+
 
 class OrganizationController extends Controller
-{
+{ 
+    private $deal_array = [];
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -21,7 +24,7 @@ class OrganizationController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 422);
-        }
+        } 
 
         try {
             $deals = [];
@@ -35,8 +38,8 @@ class OrganizationController extends Controller
                     if ($index >= $existingDeal) { 
                         $organizationData = $this->getOrCreateOrganization($row['builderName']);
                         $personData = $this->getOrCreatePerson($row, $organizationData['id'], $organizationData['owner_id']);
-                        $deal = $this->createDeal($request, $personData['id'], $organizationData['id'], $organizationData['owner_id']);
-                        array_push($deals, $deal);
+                        $deals = $this->createDeal($request, $personData['id'], $organizationData['id'], $organizationData['owner_id']);
+                        // array_push($deals, $deal);
                     }
                 }
             }
@@ -127,43 +130,77 @@ class OrganizationController extends Controller
     }
 
     private function createDeal($request, $personId, $organizationId, $ownerId)
-    {
+    {   
+        $existingDeal = Deal::where('job_id', $request->projectId)->first();
         $apiUrl = env('PIPEDRIVE_API_BASE_URL') . "/deals";
         $apiToken = env('PIPEDRIVE_API_TOKEN');
+    
+        if (!$existingDeal) {
+            $response = Http::post("$apiUrl?api_token=$apiToken", [
+                'title' => $request->projectName,
+                'value' => $request->projectValue,
+                'currency' => 'AUD',
+                'user_id' => $ownerId,
+                'person_id' => 0,
+                'org_id' => $organizationId,
+                'pipeline_id' => 1,
+                'stage_id' => 1,
+            ]);
+    
+            if ($response->failed()) {
+                throw new \Exception('Failed to create deal');
+            }
+    
+            $responseData = $response->json();
+            $dealId = $responseData['data']['id'] ?? null;
+    
+            $this->deal_array= Deal::create([
+                'pipe_drive_deal_id' => $dealId,
+                'deals_title' => $request->projectName,
+                'deals_value' => $request->projectValue,
+                'deals_currency' => 'AUD',
+                'user_id' => $ownerId,
+                'person_id' => $personId, 
+                'org_id' => $organizationId,
+                'pipeline_id' => 1,
+                'stage_id' => 1,
+                'deals_status' => 'open',
+                'description' => $request->description,
+                'notes' => $request->notes,
+                'address' => $request->address,
+                'job_id' => $request->projectId
+            ]);
 
-        $response = Http::post("$apiUrl?api_token=$apiToken", [
-            'title' => $request->projectName,
-            'value' => $request->projectValue,
-            'currency' => 'AUD',
-            'user_id' => $ownerId,
-            'person_id' => $personId,
-            'org_id' => $organizationId,
-            'pipeline_id' => 1,
-            'stage_id' => 1,
-        ]);
-
-        if ($response->failed()) {
-            throw new \Exception('Failed to create deal');
+            $this->addParticipantToDeal($dealId, $personId);
+    
+            return $this->deal_array;
+        } else {
+            $this->addParticipantToDeal($existingDeal->pipe_drive_deal_id, $personId);
         }
-
-        $responseData = $response->json();
-        $dealId = $responseData['data']['id'] ?? null;
-
-        return Deal::create([
-            'pipe_drive_deal_id' => $dealId,
-            'deals_title' => $request->projectName,
-            'deals_value' => $request->projectValue,
-            'deals_currency' => 'AUD',
-            'user_id' => $ownerId,
+        return $this->deal_array ;
+    }
+    
+    private function addParticipantToDeal($dealId, $personId)
+    {
+        $apiUrl = env('PIPEDRIVE_API_BASE_URL') . "/deals/{$dealId}/participants";
+        $apiToken = env('PIPEDRIVE_API_TOKEN');
+    
+        $response = Http::post("$apiUrl?api_token=$apiToken", [
             'person_id' => $personId,
-            'org_id' => $organizationId,
-            'pipeline_id' => 1,
-            'stage_id' => 1,
-            'deals_status' => 'open',
-            'description' => $request->description,
-            'notes' => $request->notes,
-            'address' => $request->address,
-            'job_id'=> $request->projectId
+        ]);
+    
+        if ($response->failed()) {
+            throw new \Exception('Failed to add a participant to the deal');
+        }
+    
+        $responseData = $response->json();
+        $participantId = $responseData['data']['id'] ?? null;
+    
+        return AddParticipant::create([
+            'pipedrive_add_participant_id' => $participantId,
+            'deal_id' => $dealId,
+            'person_id' => $personId,
         ]);
     }
+    
 }
