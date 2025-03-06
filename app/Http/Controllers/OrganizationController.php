@@ -9,23 +9,15 @@ use App\Models\Organization;
 use App\Models\Person;
 use App\Models\Deal;
 use Illuminate\Support\Facades\DB;
-use App\Models\AddParticipant;
-
-
-class OrganizationController extends Controller
-{ 
-    private $deal_array = [];
-    public function store(Request $request)
-    {
+class OrganizationController extends Controller {
+    public function store(Request $request) {
         $validator = Validator::make($request->all(), [
             'projectName' => 'required',
             'organizationsArray' => 'required|array',
         ]);
-
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 422);
-        } 
-
+        }
         try {
             $deals = [];
             $existingDeal = Deal::where('job_id', $request->projectId)->count();
@@ -33,13 +25,13 @@ class OrganizationController extends Controller
             if ($organizationsArrayCount == $existingDeal) {
                 return response()->json(['message' => '⚠️ This job is already posted!'], 409);
             }
-            if(isset($request->organizationsArray )){
+            if (isset($request->organizationsArray)) {
                 foreach ($request->organizationsArray as $index => $row) {
-                    if ($index >= $existingDeal) { 
+                    if ($index >= $existingDeal) {
                         $organizationData = $this->getOrCreateOrganization($row['builderName']);
                         $personData = $this->getOrCreatePerson($row, $organizationData['id'], $organizationData['owner_id']);
-                        $deals = $this->createDeal($request, $personData['id'], $organizationData['id'], $organizationData['owner_id']);
-                        // array_push($deals, $deal);
+                        $deal = $this->createDeal($request, $personData['id'], $organizationData['id'], $organizationData['owner_id']);
+                        array_push($deals, $deal);
                     }
                 }
             }
@@ -53,11 +45,9 @@ class OrganizationController extends Controller
         }
     }
 
-    private function getOrCreateOrganization($builderName)
-    {
+    private function getOrCreateOrganization($builderName) {
         $apiUrl = env('PIPEDRIVE_API_BASE_URL') . "/organizations/search";
         $apiToken = env('PIPEDRIVE_API_TOKEN');
-
         $response = Http::get($apiUrl, [
             'api_token' => $apiToken,
             'term' => $builderName,
@@ -66,35 +56,28 @@ class OrganizationController extends Controller
             'start' => 0,
             'limit' => 1,
         ]);
-
         $organizationId = $response->successful() ? ($response->json()['data']['items'][0]['item']['id'] ?? 0) : 0;
         $ownerId = 0;
-
         if ($organizationId == 0) {
             $createResponse = Http::post(env('PIPEDRIVE_API_BASE_URL') . "/organizations?api_token=$apiToken", [
                 'name' => $builderName,
             ]);
-
             if ($createResponse->failed()) {
                 throw new \Exception('Failed to create organization');
             }
-
             $responseData = $createResponse->json();
             $organizationId = $responseData['data']['id'] ?? null;
             $ownerId = $responseData['data']['owner_id']['id'] ?? null;
             Organization::create(['pipe_drive_org_id' => $organizationId, 'org_name' => $builderName, 'add_time' => now()]);
         }
-
         return ['id' => $organizationId, 'owner_id' => $ownerId];
     }
 
-    private function getOrCreatePerson($row, $organizationId, $ownerId)
-    {
+    private function getOrCreatePerson($row, $organizationId, $ownerId) {
         $apiUrl = env('PIPEDRIVE_API_BASE_URL') . "/persons/search";
         $apiToken = env('PIPEDRIVE_API_TOKEN');
         $email = $row['email'] ?? null;
         $personId = 0;
-
         if ($email) {
             $response = Http::get($apiUrl, [
                 'api_token' => $apiToken,
@@ -103,12 +86,10 @@ class OrganizationController extends Controller
                 'organization_id' => $organizationId,
                 'term' => $email,
             ]);
-
             if ($response->successful()) {
                 $personId = $response->json()['data']['items'][0]['item']['id'] ?? 0;
             }
         }
-
         if ($personId == 0) {
             $createResponse = Http::post(env('PIPEDRIVE_API_BASE_URL') . "/persons?api_token=$apiToken", [
                 'name' => $row['name'],
@@ -117,11 +98,9 @@ class OrganizationController extends Controller
                 'email' => json_encode($row['email']),
                 'phone' => json_encode($row['phone']),
             ]);
-
             if ($createResponse->failed()) {
                 throw new \Exception('Failed to create person');
             }
-
             $responseData = $createResponse->json();
             $personId = $responseData['data']['id'] ?? null;
             Person::create(['pipe_drive_person_id' => $personId, 'person_name' => $row['name'], 'owner_id' => $ownerId, 'org_id' => $organizationId, 'person_email' => json_encode($row['email']), 'person_phone' => json_encode($row['phone'])]);
@@ -129,78 +108,67 @@ class OrganizationController extends Controller
         return ['id' => $personId];
     }
 
-    private function createDeal($request, $personId, $organizationId, $ownerId)
-    {   
-        $existingDeal = Deal::where('job_id', $request->projectId)->first();
+    private function createDeal($request, $personId, $organizationId, $ownerId) {
         $apiUrl = env('PIPEDRIVE_API_BASE_URL') . "/deals";
         $apiToken = env('PIPEDRIVE_API_TOKEN');
-    
-        if (!$existingDeal) {
-            $response = Http::post("$apiUrl?api_token=$apiToken", [
-                'title' => $request->projectName,
-                'value' => $request->projectValue,
-                'currency' => 'AUD',
-                'user_id' => $ownerId,
-                'person_id' => 0,
-                'org_id' => $organizationId,
-                'pipeline_id' => 1,
-                'stage_id' => 1,
-            ]);
-    
-            if ($response->failed()) {
-                throw new \Exception('Failed to create deal');
-            }
-    
-            $responseData = $response->json();
-            $dealId = $responseData['data']['id'] ?? null;
-    
-            $this->deal_array= Deal::create([
-                'pipe_drive_deal_id' => $dealId,
-                'deals_title' => $request->projectName,
-                'deals_value' => $request->projectValue,
-                'deals_currency' => 'AUD',
-                'user_id' => $ownerId,
-                'person_id' => $personId, 
-                'org_id' => $organizationId,
-                'pipeline_id' => 1,
-                'stage_id' => 1,
-                'deals_status' => 'open',
-                'description' => $request->description,
-                'notes' => $request->notes,
-                'address' => $request->address,
-                'job_id' => $request->projectId
-            ]);
-
-            $this->addParticipantToDeal($dealId, $personId);
-    
-            return $this->deal_array;
-        } else {
-            $this->addParticipantToDeal($existingDeal->pipe_drive_deal_id, $personId);
-        }
-        return $this->deal_array ;
-    }
-    
-    private function addParticipantToDeal($dealId, $personId)
-    {
-        $apiUrl = env('PIPEDRIVE_API_BASE_URL') . "/deals/{$dealId}/participants";
-        $apiToken = env('PIPEDRIVE_API_TOKEN');
-    
         $response = Http::post("$apiUrl?api_token=$apiToken", [
+            'title' => $request->projectName,
+            'value' => $request->projectValue,
+            'currency' => 'AUD',
+            'user_id' => $ownerId,
             'person_id' => $personId,
+            'org_id' => $organizationId,
+            'pipeline_id' => 1,
+            'stage_id' => 1,
         ]);
-    
         if ($response->failed()) {
-            throw new \Exception('Failed to add a participant to the deal');
+            throw new \Exception('Failed to create deal');
         }
-    
         $responseData = $response->json();
-        $participantId = $responseData['data']['id'] ?? null;
-    
-        return AddParticipant::create([
-            'pipedrive_add_participant_id' => $participantId,
-            'deal_id' => $dealId,
+        $dealId = $responseData['data']['id'] ?? null;
+        return Deal::create([
+            'pipe_drive_deal_id' => $dealId,
+            'deals_title' => $request->projectName,
+            'deals_value' => $request->projectValue,
+            'deals_currency' => 'AUD',
+            'user_id' => $ownerId,
             'person_id' => $personId,
+            'org_id' => $organizationId,
+            'pipeline_id' => 1,
+            'stage_id' => 1,
+            'deals_status' => 'open',
+            'description' => $request->description,
+            'notes' => $request->notes,
+            'address' => $request->address,
+            'job_id'=> $request->projectId
         ]);
+    } 
+    public function job_exists(Request $request) {
+        $validator = Validator::make($request->all(), [
+            'projectName' => 'required',
+            'organizationsArray' => 'required|array',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 422);
+        }
+        try {
+            $existingDealCount = Deal::where('job_id', $request->projectId)->count() ?? 0;
+            $organizationsArrayCount = count($request->organizationsArray ?? []);    
+            if ($existingDealCount == 0) {
+                return response()->json(['message' => 'Add to Pipedrive'], 201);
+            }
+            if ($organizationsArrayCount == $existingDealCount) {
+                return response()->json(['message' => 'Already added'], 409);
+            }
+            if ($organizationsArrayCount > $existingDealCount) {
+                return response()->json(['message' => 'Update on Pipedrive'], 200);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Something went wrong!',
+                'message' => '❌ Failed to process job: ' . $e->getMessage()
+            ], 500);
+        }
     }
-    
 }
