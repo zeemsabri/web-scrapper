@@ -155,13 +155,13 @@ class OrganizationController extends Controller {
             $existingDealCount = Deal::where('job_id', $request->projectId)->count() ?? 0;
             $organizationsArrayCount = count($request->organizationsArray ?? []);    
             if ($existingDealCount == 0) {
-                return response()->json(['message' => 'Add to Pipedrive'], 201);
+                return response()->json(['message' => 'Add to Pipedrive', 'icon' => 'icon-upload', 'button_disabled' => 'false'], 201);
             }
             if ($organizationsArrayCount == $existingDealCount) {
-                return response()->json(['message' => 'Already added'], 409);
+                return response()->json(['message' => 'Already added', 'icon' => 'icon-notes', 'button_disabled' => 'true'], 409);
             }
             if ($organizationsArrayCount > $existingDealCount) {
-                return response()->json(['message' => 'Update on Pipedrive'], 200);
+                return response()->json(['message' => 'Update on Pipedrive', 'icon' => 'icon-update', 'button_disabled' => 'false'], 200);
             }
         } catch (\Exception $e) {
             return response()->json([
