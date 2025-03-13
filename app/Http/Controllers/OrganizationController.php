@@ -119,7 +119,7 @@ class OrganizationController extends Controller {
             'person_id' => $personId,
             'org_id' => $organizationId,
             'pipeline_id' => 1,
-            'stage_id' => 1,
+            'stage_id' => 2,
         ]);
         if ($response->failed()) {
             throw new \Exception('Failed to create deal');
@@ -135,7 +135,7 @@ class OrganizationController extends Controller {
             'person_id' => $personId,
             'org_id' => $organizationId,
             'pipeline_id' => 1,
-            'stage_id' => 1,
+            'stage_id' => 2,
             'deals_status' => 'open',
             'description' => $request->description,
             'notes' => $request->notes,
