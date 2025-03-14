@@ -114,12 +114,12 @@ class OrganizationController extends Controller {
         $response = Http::post("$apiUrl?api_token=$apiToken", [
             'title' => $request->projectName,
             'value' => $request->projectValue,
-            'currency' => 'AUD',
+            'currency' => env('PIPEDRIVE_CURRENCY'),
             'user_id' => $ownerId,
             'person_id' => $personId,
             'org_id' => $organizationId,
-            'pipeline_id' => 1,
-            'stage_id' => 2,
+            'pipeline_id' => env('PIPEDRIVE_PIPELINE_ID'),
+            'stage_id' => env('PIPEDRIVE_STAGE_ID'),
         ]);
         if ($response->failed()) {
             throw new \Exception('Failed to create deal');
@@ -130,12 +130,12 @@ class OrganizationController extends Controller {
             'pipe_drive_deal_id' => $dealId,
             'deals_title' => $request->projectName,
             'deals_value' => $request->projectValue,
-            'deals_currency' => 'AUD',
+            'deals_currency' => env('PIPEDRIVE_CURRENCY'),
             'user_id' => $ownerId,
             'person_id' => $personId,
             'org_id' => $organizationId,
-            'pipeline_id' => 1,
-            'stage_id' => 2,
+            'pipeline_id' => env('PIPEDRIVE_PIPELINE_ID'),
+            'stage_id' => env('PIPEDRIVE_STAGE_ID'),
             'deals_status' => 'open',
             'description' => $request->description,
             'notes' => $request->notes,
