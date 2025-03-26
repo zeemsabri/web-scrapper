@@ -17,7 +17,6 @@ class InvoiceController extends Controller
 {
     public function push_invoice(Request $request)
     {
-        return '123';
         $validator = Validator::make($request->all(), [
             'projectId' => 'required',
             'projectName' => 'required',
