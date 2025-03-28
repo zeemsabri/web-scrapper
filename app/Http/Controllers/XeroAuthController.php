@@ -23,8 +23,8 @@ class XeroAuthController extends Controller
     // Step 1: Redirect User to Xero Authorization Page
     public function redirectToXero()
     {  
-        $clientId = "B0CAE331402B42C8833DC0E39D284BA4"; // Replace with your actual Client ID
-        $redirectUri = "https://api-explorer.xero.com/";
+        $clientId = $this->client_id; // Replace with your actual Client ID
+        $redirectUri = $this->redirect_uri;
         $scope = "openid profile email accounting.transactions accounting.contacts accounting.settings offline_access";
         $state = "123";
     

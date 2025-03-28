@@ -70,10 +70,13 @@ class InvoiceController extends Controller
             // Xero Contact Creation
             $xeroContactId = $this->createXeroConatct($person_name , $xeroAccessToken , $xeroTenantId);
             // Xero Item Creation
-            $xeroItemId = $this->createXeroItem($xeroAccessToken ,$itemName ,$totalInvoiceValue ,$xeroTenantId);
+            $lastXeroItem = XeroItem::latest('id')->first();
+            $xeroItemId = ($lastXeroItem ? $lastXeroItem->id : 0)+1;
+            $xeroItemId = $this->createXeroItem($xeroAccessToken ,$itemName ,$totalInvoiceValue ,$xeroTenantId, $xeroItemId);
             if($xeroItemId > 0){
                 XeroItem::create([
-                    'code' => $itemName,
+                    'id' => $xeroItemId,
+                    'code' => $$xeroItemId,
                     'name' => $itemName,
                     'is_sold' => true,
                     'unit_price' => $totalInvoiceValue,
@@ -81,7 +84,7 @@ class InvoiceController extends Controller
                 ]);
             }
             // Xero Invoice Creation
-            $invoiceData = $this->createXeroInvoice($xeroContactId ,$itemName,$totalInvoiceValue,$xeroAccessToken,$xeroTenantId);
+            $invoiceData = $this->createXeroInvoice($xeroContactId ,$itemName,$totalInvoiceValue,$xeroAccessToken,$xeroTenantId,$xeroItemId);
            $printLink ="";
             if($invoiceData){ 
                 $currentDate = Carbon::now()->format('Y-m-d');
@@ -184,23 +187,22 @@ class InvoiceController extends Controller
             return $xeroResponse['Contacts'][0]['ContactID'] ?? null;
         }
 
-        function createXeroItem($xeroAccessToken ,$itemName ,$totalInvoiceValue ,$xeroTenantId){
+        function createXeroItem($xeroAccessToken ,$itemName ,$totalInvoiceValue ,$xeroTenantId,$xeroItemId){
             $response = Http::withToken($xeroAccessToken)
             ->withHeaders(['Xero-tenant-id' => $xeroTenantId])
             ->post('https://api.xero.com/api.xro/2.0/Items', [
                 'Items' => [[
-                    'Code' => preg_replace("/[^A-Za-z0-9 ]/", "",$itemName),
+                    'Code' => $xeroItemId,
                     'Name' => preg_replace("/[^A-Za-z0-9 ]/", "",$itemName),
                     'IsSold' => true,
                     'SalesDetails' => ['UnitPrice' => $totalInvoiceValue]
                 ]]
             ]);
-
-                  $xeroResponse = $response->json();
-            return   $xeroItemId = $xeroResponse['Items'][0]['ItemID'] ?? null;
+            $xeroResponse = $response->json();
+            return $xeroItemId = $xeroResponse['Items'][0]['ItemID'] ?? null;
         } 
 
-        function createXeroInvoice($xeroContactId ,$itemName,$totalInvoiceValue,$xeroAccessToken,$xeroTenantId){
+        function createXeroInvoice($xeroContactId ,$itemName,$totalInvoiceValue,$xeroAccessToken,$xeroTenantId,$xeroItemId){
             $currentDate = Carbon::now()->format('Y-m-d');
             $dueDate = Carbon::now()->addDays(45)->format('Y-m-d');
             $payload = [
@@ -210,7 +212,7 @@ class InvoiceController extends Controller
                     "Date" => $currentDate,
                     "DueDate" => $dueDate,
                     "LineItems" => [[
-                        "ItemCode" => preg_replace("/[^A-Za-z0-9 ]/", "",$itemName),
+                        "ItemCode" => $xeroItemId,
                         "Description" => preg_replace("/[^A-Za-z0-9 ]/", "",$itemName),
                         "Quantity" => 1,
                         "UnitAmount" => $totalInvoiceValue,
